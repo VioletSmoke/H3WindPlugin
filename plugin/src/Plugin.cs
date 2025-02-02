@@ -24,13 +24,24 @@ namespace visSpace
          * Also check out the Unity documentation: https://docs.unity3d.com/560/Documentation/ScriptReference/index.html
          * And the C# documentation: https://learn.microsoft.com/en-us/dotnet/csharp/
          */
-        internal static Vector3 WindVector;
+        public static Vector3 WindVector;
+        public static Vector3 ActiveGustVector = Vector3.zero;
         // Configurable wind settings
         internal static float WindStrength;   // Multiplier for wind force
         internal static float WindChangeTime;
+        internal static Vector3 GustVector;
+        internal static float GustSpeed;
+        internal static float GustRand;
+        internal static float GustFreq;
+        internal static float GustDuration;
+
         internal static bool AffectsRb;
         internal static ConfigEntry<float> WindStrConfig;
         internal static ConfigEntry<float> WindTimeConfig;
+        internal static ConfigEntry<float> WindGustRandConfig;
+        internal static ConfigEntry<float> WindGustIntConfig;
+        internal static ConfigEntry<float> WindGustFreqConfig;
+        internal static ConfigEntry<float> WindGustDurConfig;
         internal static ConfigEntry<bool> WindRBConfig;
 
         private void LoadConfig()
@@ -38,27 +49,41 @@ namespace visSpace
             // Config system automatically loads these settings from a .cfg file
             //ConfigDefinition.Bind()
 
-            WindStrConfig = Config.Bind("Wind Settings", "Wind Strength", 3.0f, "Controls the strength of the wind effect.");
-            WindTimeConfig = Config.Bind("Wind Settings", "Wind Change Time", 30f, "Controls how often wind direction changes in minimum seconds.");
+            WindStrConfig = Config.Bind("Wind Settings", "Wind Strength", 6.0f, "Controls the strength of the wind effect.");
+            WindTimeConfig = Config.Bind("Wind Settings", "Wind Change Time", 150f, "Controls how often wind direction changes in minimum seconds.");
             WindRBConfig = Config.Bind("Wind Settings", "Wind Affects Rigidbodies", true, "Controls if wind affects all objects and not only bullets.");
+            WindGustRandConfig = Config.Bind("Wind Settings", "Gust Randomness", 0.25f, "How random gusts are");
+            WindGustIntConfig = Config.Bind("Wind Settings", "Gust Intensity", 3f, "How strong gusts are maximum");
+            WindGustFreqConfig = Config.Bind("Wind Settings", "Gust Frequency", 5f, "How often gusts occur minimum");
+            WindGustDurConfig = Config.Bind("Wind Settings", "Gust Duration", 2.5f, "How long gusts last minimum");
             AffectsRb = WindRBConfig.Value;
             WindStrength = WindStrConfig.Value;
             WindChangeTime = WindTimeConfig.Value;
+            GustRand = WindGustRandConfig.Value;
+            GustSpeed = WindGustIntConfig.Value;
+            GustFreq = WindGustFreqConfig.Value;
+            GustDuration = WindGustDurConfig.Value;
 
             WindStrConfig.SettingChanged += OnSettingChanged;
             WindRBConfig.SettingChanged += OnSettingChanged;
             WindTimeConfig.SettingChanged += OnSettingChanged;
-        }
+            WindGustIntConfig.SettingChanged += OnSettingChanged;
+            WindGustRandConfig.SettingChanged += OnSettingChanged;
+            WindGustFreqConfig.SettingChanged += OnSettingChanged;
+            WindGustDurConfig.SettingChanged += OnSettingChanged;
+         }
         private void OnSettingChanged(object sender, EventArgs e)
         {
-            // Check if the changed setting is one of the relevant ones
-            //if (e.ChangedSetting.Definition.Section == "Wind Settings")
-            //{
 
             WindStrength = WindStrConfig.Value;
             AffectsRb = WindRBConfig.Value;
             WindChangeTime = WindTimeConfig.Value;
-            GenerateWind();
+            GustRand = WindGustRandConfig.Value;
+            GustSpeed = WindGustIntConfig.Value;
+            GustFreq = WindGustFreqConfig.Value;
+            GustDuration = WindGustDurConfig.Value;
+
+            //GenerateWind();
 
             //}
         }
@@ -75,6 +100,7 @@ namespace visSpace
 
             GenerateWind();
             StartCoroutine(UpdateWind());
+            StartCoroutine(UpdateGustVector());
         }
         private void OnDestroy()
         {
@@ -82,6 +108,71 @@ namespace visSpace
             WindStrConfig.SettingChanged -= OnSettingChanged;
             WindRBConfig.SettingChanged -= OnSettingChanged;
             WindTimeConfig.SettingChanged -= OnSettingChanged;
+            WindGustRandConfig.SettingChanged -= OnSettingChanged;
+            WindGustIntConfig.SettingChanged -= OnSettingChanged;
+            WindGustFreqConfig.SettingChanged -= OnSettingChanged;
+            WindGustDurConfig.SettingChanged -= OnSettingChanged;
+        }
+        private IEnumerator UpdateGustVector()
+        {
+            while(true)
+            { 
+                // Assume windVector is already set.
+                GustVector = WindVector;
+
+                // Create a random offset vector:
+                // We'll generate a random vector (with a slight vertical constraint) and normalize it,
+                // then scale it by 1/4 of the wind's magnitude.
+                Vector3 randomOffset = new Vector3(
+                    UnityEngine.Random.Range(-1f, 1f),
+                    UnityEngine.Random.Range(-0.1f, 0.1f),
+                    UnityEngine.Random.Range(-1f, 1f)
+                ).normalized * (GustVector.magnitude * GustRand);
+
+                // Start gustVector as windVector plus the random offset.
+                GustVector += randomOffset;
+
+                // Now scale the magnitude of gustVector by a random factor.
+                // For example, you can choose a factor between 0.5 and 1.5.
+                float scaleFactor = UnityEngine.Random.Range(0.01f, GustSpeed);
+                GustVector *= scaleFactor;
+
+                yield return StartCoroutine(SmoothDoGust(UnityEngine.Random.Range(GustDuration, GustDuration * 4)));
+
+                yield return new WaitForSeconds(UnityEngine.Random.Range(GustFreq, GustFreq * 4));
+            }
+        }
+        private IEnumerator SmoothDoGust(float duration)
+        {
+            Vector3 startValue = ActiveGustVector;
+
+            float elapsedTime = 0f;
+            float r1 = UnityEngine.Random.Range(duration/ 5, duration - duration / 5);
+            float r2 = UnityEngine.Random.Range(duration/5, duration - duration / 5);
+
+            float attackTime = Mathf.Min(r1, r2);
+            float sustainTime = Mathf.Max(r1, r2) - attackTime;
+            float decayTime = duration - (attackTime + sustainTime);
+
+            while (elapsedTime < attackTime)
+            {
+                ActiveGustVector = Vector3.Slerp(startValue, GustVector, elapsedTime / attackTime);
+                
+                elapsedTime += Time.deltaTime;
+
+                yield return null;
+            }
+            yield return new WaitForSeconds(sustainTime);
+            elapsedTime = 0;
+            while(elapsedTime < decayTime)
+            {
+                ActiveGustVector = Vector3.Slerp(ActiveGustVector, startValue, elapsedTime / decayTime);
+
+                elapsedTime += Time.deltaTime;
+
+                yield return null;
+            }
+            ActiveGustVector *= 0;
         }
         private IEnumerator SmoothChangeWind(Vector3 targetValue, float duration)
         {
@@ -112,9 +203,9 @@ namespace visSpace
         {
             // Get surface area from collider
             float surfaceArea = GetColliderSurfaceArea(rb);
-
-            Vector3 windDirection = WindVector.normalized;
-            float windSpeedSqr = WindVector.sqrMagnitude;
+            Vector3 windAndGust = WindVector + ActiveGustVector;
+            Vector3 windDirection = windAndGust.normalized;
+            float windSpeedSqr = windAndGust.sqrMagnitude;
             //Vector3 relativeVelocity = rb.velocity;
             //float velocityInWindDirection = Vector3.Dot(relativeVelocity.normalized, WindVector.normalized) * relativeVelocity.sqrMagnitude;
             float velocityInWindDirection = Vector3.Dot(rb.velocity, windDirection);
@@ -148,6 +239,7 @@ namespace visSpace
  
             return totalSurfaceArea;
         }
+
         private IEnumerator UpdateWind()
         {
             while (true)
@@ -162,7 +254,7 @@ namespace visSpace
                 if (Logger != null)
                     Logger.LogInfo($"Generated Wind Vector: {newWind}");
                 // Wait for 5 seconds before running again
-                yield return new WaitForSeconds(randTime /8);
+                yield return new WaitForSeconds(randTime / UnityEngine.Random.Range(1, 16));
             }
         }
 

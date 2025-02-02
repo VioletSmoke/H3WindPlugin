@@ -8,7 +8,7 @@ default value of 6 is good for challenging shooting on duney. a lot of smaller m
 
 feel free to turn it up to the thousands for jupiter-speed winds, but beware, it's possible your mod panel will be blown out of your hands if you don't freeze it.
 
-gusts and a wind indicator might be added in the future. feel free to DIY
+gusts are added, and there is a wind indicator available if you search for dependencies. feel free to use my code for any purpose.
 
 
 license: steal this mod

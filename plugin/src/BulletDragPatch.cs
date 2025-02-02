@@ -7,10 +7,10 @@ namespace visSpace.Patches
     public class BulletDragPatch
     {
         [HarmonyPrefix]
-        public static void Prefix(ref Vector3 velocity)
+        public static void Prefix(ref Vector3 velocity, ref float time)
         {
             // Apply wind force before drag calculations
-            velocity += WindPlugin.WindVector * Time.deltaTime;
+            velocity += (WindPlugin.ActiveGustVector + WindPlugin.WindVector) * time;
 
 
         }

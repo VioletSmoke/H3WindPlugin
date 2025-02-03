@@ -3,7 +3,7 @@
     <!-- TODO: Change these values! -->
     <PropertyGroup>
         <AssemblyName>wind</AssemblyName>
-        <Version>0.0.3</Version>
+        <Version>0.0.46</Version>
         <Authors>vithamonsta</Authors>
         <AssemblyTitle>Simple Wind Plugin</AssemblyTitle>
         <Description>simple wind plugin</Description>

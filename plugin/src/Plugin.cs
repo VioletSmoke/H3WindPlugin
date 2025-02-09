@@ -199,7 +199,7 @@ namespace visSpace
 
         private IEnumerator ManageRBWind()
         {
-            float updateTime = 1.5f;
+            float updateTime = 1.0f;
             while (true)
             {
                 AffectsRb = WindRBConfig.Value;
@@ -225,29 +225,32 @@ namespace visSpace
 
             // Get surface area from collider - in game drag values aren't always set correctly.
             float surfaceArea = GetColliderSurfaceArea(rb);
-            if (surfaceArea > 0.025)
+            if (surfaceArea > 0.007)
             {
                 while (elapsedTime < time)
                 {
                     if (rb == null)
                         break;
-                    Vector3 windAndGust = WindVector + ActiveGustVector;
-                    Vector3 windDirection = windAndGust.normalized;
-                    float windSpeedSqr = windAndGust.sqrMagnitude;
-                    //float randTime = Mathf.RoundToInt(UnityEngine.Random.Range(2, 6)) * Time.fixedDeltaTime;
-                    //Vector3 relativeVelocity = rb.velocity;
-                    //float velocityInWindDirection = Vector3.Dot(relativeVelocity.normalized, WindVector.normalized) * relativeVelocity.sqrMagnitude;
-                    float velocityInWindDirection = Vector3.Dot(rb.velocity, windDirection);
-                    float remainingWindSpeedSqr = Mathf.Max(0, windSpeedSqr - velocityInWindDirection * velocityInWindDirection);
-
-
-                    if (remainingWindSpeedSqr > 0)
+                    if (!rb.IsSleeping() && !rb.isKinematic)
                     {
-                        //float forceScale = (1f - (relativeSpeed / windSpeed)) * 1; // Scale force based on velocity
-                        Vector3 windForce = windDirection * Mathf.Sqrt(remainingWindSpeedSqr) * surfaceArea;
+                        Vector3 windAndGust = WindVector + ActiveGustVector;
+                        Vector3 windDirection = windAndGust.normalized;
+                        float windSpeedSqr = windAndGust.sqrMagnitude;
+                        //float randTime = Mathf.RoundToInt(UnityEngine.Random.Range(2, 6)) * Time.fixedDeltaTime;
+                        //Vector3 relativeVelocity = rb.velocity;
+                        //float velocityInWindDirection = Vector3.Dot(relativeVelocity.normalized, WindVector.normalized) * relativeVelocity.sqrMagnitude;
+                        float velocityInWindDirection = Vector3.Dot(rb.velocity, windDirection);
+                        float remainingWindSpeedSqr = Mathf.Max(0, windSpeedSqr - velocityInWindDirection * velocityInWindDirection);
 
 
-                        rb.AddForce(windForce, ForceMode.Force); // Apply force to the rigidbody
+                        if (remainingWindSpeedSqr > 0)
+                        {
+                            //float forceScale = (1f - (relativeSpeed / windSpeed)) * 1; // Scale force based on velocity
+                            Vector3 windForce = windDirection * Mathf.Sqrt(remainingWindSpeedSqr) * surfaceArea;
+
+
+                            rb.AddForce(windForce, ForceMode.Force); // Apply force to the rigidbody
+                        }
                     }
                     yield return new WaitForFixedUpdate();
                     elapsedTime += Time.fixedDeltaTime;
@@ -259,19 +262,36 @@ namespace visSpace
         {
             float totalSurfaceArea = 0f;
 
-            // Loop through all colliders attached to the Rigidbody
             foreach (Collider collider in rb.GetComponents<Collider>())
             {
-
-                // Get the bounds of the collider and approximate surface area as a box
-                Bounds bounds = collider.bounds;
-                // Surface area of a box = 2 * (width * height + width * depth + height * depth)
-                float surfaceArea = 2f * (bounds.size.x * bounds.size.y + bounds.size.x * bounds.size.z + bounds.size.y * bounds.size.z);
-                totalSurfaceArea += surfaceArea;
+                if (collider is BoxCollider box)
+                {
+                    Vector3 size = box.size;
+                    totalSurfaceArea += 2f * (size.x * size.y + size.x * size.z + size.y * size.z);
+                }
+                else if (collider is SphereCollider sphere)
+                {
+                    float radius = sphere.radius;
+                    totalSurfaceArea += 4f * Mathf.PI * radius * radius;
+                }
+                else if (collider is CapsuleCollider capsule)
+                {
+                    float radius = capsule.radius;
+                    float height = capsule.height - (2 * radius); // Excluding the spherical caps
+                    totalSurfaceArea += (2f * Mathf.PI * radius * radius) + (2f * Mathf.PI * radius * height);
+                }
+                else if (collider is MeshCollider meshCollider && meshCollider.sharedMesh != null)
+                {
+                    // Use OBB approximation for the mesh collider
+                    Bounds localBounds = meshCollider.sharedMesh.bounds;
+                    Vector3 worldSize = Vector3.Scale(localBounds.size, meshCollider.transform.lossyScale);
+                    totalSurfaceArea += 2f * (worldSize.x * worldSize.y + worldSize.x * worldSize.z + worldSize.y * worldSize.z);
+                }
             }
 
             return totalSurfaceArea;
         }
+
 
         private IEnumerator UpdateWind()
         {
